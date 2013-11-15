@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="utf-8"/>
+    <title>LibreBSD 0.9 (Open Security Platform)</title>
+    <meta name="generator" content="LibreBSD - Copyright (C) 2011-2013 Roozbeh Shafiee. All rights reserved."/>
+    <meta name="robots" content="noindex, nofollow"/>
+    <meta name="viewport" content="initial-scale=1.0 maximum-scale=1.0 user-scalable=no"/>
+    <meta name="HandheldFriendly" content="True"/>
+    <meta name='msapplication-TileImage' content='images/favicon/ms-application-icon.png'/>
+    <meta name='msapplication-TileColor' content='#f89938'>
+    <link rel="icon" type="image/png" href="images/librebsd_favicon.png" />
+    <link rel="stylesheet" href="css/style.css"/>
+    <link href="css/jquery-ui-1.8.21.custom.css" rel="stylesheet"/>
+    <script type="text/javascript" src="jquery/js/jquery-1.7.2.min.js"></script>
+    <script type="text/javascript" src="jquery/js/jquery-ui-1.8.21.custom.min.js"></script>
+    <script type="text/javascript" src="jquery/js/jquery.ui.nestedSortable-1.3.4.js"></script>
+    <script type="text/javascript" src="jquery/js/jquery.json-2.3.min.js"></script>
+    <script type="text/javascript" src="includes/jquery.cookie.min.js"></script>
+    <script type="text/javascript" src="includes/standard.js"></script>
+    <script type="text/javascript" src="includes/ajax.js"></script>
+
+</head>
+<body lang="fa" id="c0996aa2b7b28ac1111fb78c7deb2e0a" class="">
+<!-- start container -->
+<div id="oe_container" class="sidebar-on">
+<!-- start header -->
+<header role="banner" class="cf header">
+    <!-- start header-top -->
+    <div class="header-top cf">
+        <!-- logo -->
+        <div class="librebsd-logo">
+            <a href="http://LibreBSD.org" rel="external">
+                <img src="images/librebsd-logo.png" width="250" height="69" alt="LibreBSD" title="LibreBSD"/></a>
+        </div>
+        <!-- title -->
+
+    </div>
+    <div class='clear'></div>
+    <!-- end header-top //-->
+    <!-- start header-bottom -->
+    <div class="header-bottom cf">
+        <!-- breadcrubms -->
+        <div class="breadcrumbs" itemscope itemtype="http://data-vocabulary.org/Breadcrumb">
+            <ul class="cf">
+                <li class="home"><a href="dashboard/dashboard.html" class="arrow" title="Dashboard">Dashboard</a></li>
+                <li class="first" itemprop="parent"><a href="#" title="System">System</a></li>
+                <li class="current" itemprop="child">Administration</li>
+            </ul>
+        </div>
+
+        <!-- bookmarks -->
+        <div class="shortcuts">
+            <ul class="cf">
+                <li class="console"><a href="#" title="Console Access">Console Access</a></li>
+                <li class="logout"><a href="#" title="Logout">Logout</a></li>
+                <li class="reboot open"><a href="#" title="Reboot System">Reboot System</a></li>
+                <li class="poweroff"><a href="#" rel="external" target="_blank" title="Power Off System">Power Off System</a></li>
+            </ul>
+        </div>
+    </div>
+    <!-- end header-bottom //-->
+</header>
+<!-- end header //-->
+<!-- start content -->
+<div id="oe_admin-content">
+<div class="shadow">
+    &nbsp;
+</div>
+<!-- start sidebar -->
+<div id="oe_sidebar">
+    <aside>
+        <span title="Open/بستن" class="toggle-button close">Open/بستن</span>
+        <!-- notifications -->
+
+        <!-- start navigation -->
+        <nav class="navigation" id="oe_menu" role="navigation">
+            <div class="box-shadow">&nbsp;</div>
+            <ul id="oe_pagemenu">
+            
+                <li class="nav"><a href="#" class="wizard parent" title="Wizard">Wizard</a><span
+                        class="open-nav" title="Open/Close Wizard Section">Open/Close Wizard Section</span>
+                    <ul>
+                        <li class="sub"><a href="wizard/basic_wizard.html" class="arrow" title="Basic Wizard">Basic Wizard</a></li>
+                        <li class="sub"><a href="wizard/advanced_wizard.html" class="arrow" title="Advanced Wizard">Advanced Wizard</a></li>                   
+                    </ul>
+                </li>
+            
+                <li class="nav"><a href="#" class="system parent" title="System">System</a><span
+                        class="open-nav" title="Open/Close System Section">Open/Close System Section</span>
+                    <ul>
+                        <li class="sub"><a href="system/administration.html" class="arrow" title="Administration">Administration</a></li>
+                        <li class="sub"><a href="system/configuration.html" class="arrow" title="Configuration">Configuration</a></li>
+                        <li class="sub"><a href="system/maintaince.html" class="arrow" title="Maintaince">Maintaince</a></li>
+                        <li class="sub"><a href="system/high_availability.html" class="arrow" title="High Availability">High Availability</a></li>
+                        <li class="sub"><a href="system/snmp.html" class="arrow" title="SNMP">SNMP</a></li>
+                        <li class="sub"><a href="system/certificate.html" class="arrow" title="Certificate">Certificate</a></li>
+                        <li class="sub"><a href="system/diagnostics.html" class="arrow" title="Diagnostics">Diagnostics</a></li>                    
+                    </ul>
+                </li>
+                             
+                <li class="nav"><a href="#" class="object parent" title="Objects">Objects</a><span
+                        class="open-nav" title="Open/Close Objects Section">Open/Close Objects Section</span>
+                    <ul>
+                        <li class="sub"><a href="objects/hosts.html" class="arrow" title="Hosts">Hosts</a></li>       
+                        <li class="sub"><a href="objects/protocols.html" class="arrow" title="Services">Protocols</a></li>                    
+                    </ul>
+                </li>
+                
+                <li class="nav"><a href="#" class="network parent" title="Network">Network</a><span 
+                class="open-nav" title="Open/Close Network Section">Open/Close Network Section</span>
+                    <ul>
+                        <li class="sub"><a href="network/interfaces.html" class="arrow" title="Interfaces">Interfaces</a></li>    
+                        <li class="sub"><a href="network/gateways.html" class="arrow" title="Gateways">Gateways</a></li> 
+                        <li class="sub"><a href="network/static_route.html" class="arrow" title="Static Route">Static Route</a></li>                    
+                        <li class="sub"><a href="network/dhcp.html" class="arrow" title="DHCP">DHCP</a></li>                    
+                        <li class="sub"><a href="network/dns.html" class="arrow" title="DNS">DNS</a></li>                    
+                        <li class="sub"><a href="network/arp.html" class="arrow" title="ARP">ARP</a></li>                    
+                        <li class="sub"><a href="network/dynamic_dns.html" class="arrow" title="Dynamic DNS">Dynamic DNS</a></li>                    
+                    </ul>
+                </li>
+                
+                <li class="nav"><a href="#" class="accounting parent" title="Accounting and Access">Accounting and Access</a><span
+                        class="open-nav" title="Open/Close Accounting And Access Section">Open/Close Accounting And Access Section</span>
+                    <ul>
+                        <li class="sub"><a href="accounting/authentication.html" class="arrow" title="Authentication">Authentication</a></li>   
+                        <li class="sub"><a href="accounting/groups.html" class="arrow" title="Groups">Groups</a></li>                    
+                        <li class="sub"><a href="accounting/users.html" class="arrow" title="Users">Users</a></li>                    
+                        <li class="sub"><a href="accounting/guest_users.html" class="arrow" title="Guest Users">Guest Users</a></li>                    
+                        <li class="sub"><a href="accounting/access_policies.html" class="arrow" title="Access Policies">Access Policies</a></li>    
+                    </ul>
+                </li>
+                
+                <li class="nav"><a href="#" class="firewall parent" title="Firewall">Firewall</a>
+                <span class="open-nav" title="Open/Close Firewall Section">Open/Close Firewall Section</span>
+                    <ul>
+                        <li class="subs"><p>IDS</p></li>
+                        <li class="sub"><a href="firewall/ids/policies.html" class="arrow" title="Policy">Policy</a></li>
+                        <li class="sub"><a href="firewall/ids/virtualhosts.html" class="arrow" title="VirtualHost">VirtualHost</a></li>
+                        <li class="sub"><a href="firewall/ids/nat_policies.html" class="arrow" title="NAT Policies">NAT Policies</a></li>
+                        <li class="sub"><a href="firewall/ids/spoof_prevention.html" class="arrow" title="Spoof Prevention">Spoof Prevention</a></li>
+                        <li class="sub"><a href="firewall/ids/dos_prevention.html" class="arrow" title="DoS Prevention">DoS Prevention</a></li>
+                        <li class="subs"><p>IPS</p></li>
+                        <li class="sub"><a href="firewall/ips/policies.html" class="arrow" title="Policies">Policies</a></li>
+                        <li class="sub"><a href="firewall/ips/custom_signature.html" class="arrow" title="Custom Signature">Custom Signature</a></li>
+                        <li class="subs"><p>Web Server Defender</p></li>
+                        <li class="sub"><a href="firewall/web_server_defender/web_servers.html" class="arrow" title="Web Servers">Web Servers</a></li>
+                        <li class="sub"><a href="firewall/web_server_defender/global_settings.html" class="arrow" title="Global Settings">Global Settings</a></li>
+
+                    </ul>
+                </li>
+                
+                <li class="nav"><a href="#" class="vpn parent" title="VPN">VPN</a>
+                <span class="open-nav" title="Open/Close VPN Section">Open/Close VPN Section</span>
+                    <ul>
+                        <li class="sub"><a href="vpn/policies.html" class="arrow" title="Policy">Policy</a></li>
+                        <li class="sub"><a href="vpn/ipsec.html" class="arrow" title="IPSec">IPSec</a></li>
+                        <li class="sub"><a href="vpn/ssl.html" class="arrow" title="SSL">SSL</a></li>
+                        <li class="sub"><a href="vpn/open_vpn.html" class="arrow" title="OpenVPN">OpenVPN</a></li>
+                        <li class="sub"><a href="vpn/l2tp.html" class="arrow" title="L2TP">L2TP</a></li>
+                        <li class="sub"><a href="vpn/pptp.html" class="arrow" title="PPTP">PPTP</a></li>
+                    </ul>
+                </li>
+                              
+                <li class="nav"><a href="#" class="filtering parent" title="Filtering">Filtering</a>
+                <span class="open-nav" title="Open/Close Filtering Section">Open/Close Filtering Section</span>
+                    <ul>
+                        <li class="subs"><p>Web Filter</p></li>
+                        <li class="sub"><a href="filtering/web_filter/settings.html" class="arrow" title="Settings">Settings</a></li>
+                        <li class="sub"><a href="filtering/web_filter/categories.html" class="arrow" title="Categories">Categories</a></li>
+                        <li class="sub"><a href="filtering/web_filter/policies.html" class="arrow" title="Policy">Policy</a></li>
+                        <li class="subs"><p>Application Filter</p></li>
+                        <li class="sub"><a href="filtering/application_filter/categories.html" class="arrow" title="Categories">Categories</a></li>
+                        <li class="sub"><a href="filtering/application_filter/policies.html" class="arrow" title="Policy">Policy</a></li>
+                        <li class="subs"><p>IM Filter</p></li>
+                        <li class="sub"><a href="filtering/im_filter/im_contacts.html" class="arrow" title="IM Contacts">IM Contacts</a></li>
+                        <li class="sub"><a href="filtering/im_filter/im_policies.html" class="arrow" title="IM Policies">IM Policies</a></li>
+                        <li class="sub"><a href="filtering/im_filter/content_filter.html" class="arrow" title="Content Filter">Content Filter</a></li>
+                        <li class="subs"><p>File Transfer Filter</p></li>
+                        <li class="sub"><a href="filtering/file_transfer_filter/file_types.html" class="arrow" title="File Types">File Types</a></li>
+                        <li class="sub"><a href="filtering/file_transfer_filter/file_content_protection.html" class="arrow" title="File And Content Protection">File And Content Protection</a></li>
+                        <li class="sub"><a href="filtering/file_transfer_filter/policies.html" class="arrow" title="Policies">Policies</a></li>
+                    </ul>
+                </li>
+                                                             
+                <li class="nav"><a href="#" class="defense parent" title="Defense System">Defense System</a>
+                <span class="open-nav" title="Open/Close Defense System Section">Open/Close Defense System Section</span>
+                    <ul>
+                        <li class="subs"><p>AntiVirus</p></li>
+                        <li class="sub"><a href="defense_system/antivirus/mail.html" class="arrow" title="Mail">Mail</a></li>
+                        <li class="sub"><a href="defense_system/antivirus/http_https.html" class="arrow" title="HTTP and HTTPS">HTTP and HTTPS</a></li>
+                        <li class="sub"><a href="defense_system/antivirus/ftp.html" class="arrow" title="FTP">FTP</a></li>
+                        <li class="sub"><a href="defense_system/antivirus/quarantine.html" class="arrow" title="Quarantine">Quarantine</a></li>
+                        <li class="subs"><p>AntiSpam</p></li>
+                        <li class="sub"><a href="defense_system/antispam/configuration.html" class="arrow" title="Configuration">Configuration</a></li>
+                        <li class="sub"><a href="defense_system/antispam/spam_policies.html" class="arrow" title="Spam Policies">Spam Policies</a></li>
+                        <li class="sub"><a href="defense_system/antispam/trusted_domains.html" class="arrow" title="Trusted Domains">Trusted Domains</a></li>
+                        <li class="sub"><a href="defense_system/antispam/quarantine.html" class="arrow" title="Quarantine">Quarantine</a></li>
+                    </ul>
+                </li>
+                               
+                <li class="nav"><a href="#" class="monitoring parent" title="Monitoring">Monitoring</a>
+                <span class="open-nav" title="Open/Close Monitoring Section">Open/Close Monitoring Section</span>
+                    <ul>
+                        <li class="subs"><p>Live Reports</p></li>
+                        <li class="sub"><a href="monitoring/live_reports/live_users.html" class="arrow" title="Live Users">Live Users</a></li>
+                        <li class="sub"><a href="monitoring/live_reports/live_connections.html" class="arrow" title="Live Connections">Live Connections</a></li>
+                        <li class="sub"><a href="monitoring/live_reports/live_vpn_connections.html" class="arrow" title="Live VPN Connections">Live VPN Connections</a></li>
+                        <li class="subs"><p>Logging And Reports</p></li>
+                        <li class="sub"><a href="monitoring/log_reports/log_viewer.html" class="arrow" title="Log Viewer">Log Viewer</a></li>
+                        <li class="sub"><a href="monitoring/log_reports/report_viewer.html" class="arrow" title="Report Viewer">Report Viewer</a></li>
+                        <li class="sub"><a href="monitoring/log_reports/4eye_authentication.html" class="arrow" title="4Eye Authentication">4Eye Authentication</a></li>
+                        <li class="subs"><p>System</p></li>
+                        <li class="sub"><a href="monitoring/system/system_log.html" class="arrow" title="System Log">System Log</a></li>
+                        <li class="sub"><a href="monitoring/system/system_graph.html" class="arrow" title="System Graph">System Graph</a></li>
+                    </ul>
+                </li>
+                
+                <li class="nav"><a href="#" class="alert parent" title="Alerts">Alerts</a>
+                <span class="open-nav" title="Open/Close Help And Support Section">Open/Close Help And Support Section</span>
+                    <ul>
+                        <li class="sub"><a href="alerts/ips_alerts.html" class="arrow" title="IPS Alerts">IPS Alerts</a></li>
+                        <li class="sub"><a href="alerts/antivirus_alerts.html" class="arrow" title="AntiVirus Alerts">AntiVirus Alerts</a></li>
+                        <li class="sub"><a href="alerts/antispam_alerts.html" class="arrow" title="AntiSpam Alerts">AntiSpam Alerts</a></li>
+                        <li class="sub"><a href="alerts/web_server_defender_alerts.html" class="arrow" title="Web Server Defender Alerts">Web Server Defender Alerts</a></li>
+                        <li class="sub"><a href="alerts/system_alerts.html" class="arrow" title="System Alerts">System Alerts</a></li>
+                    </ul>
+                </li>
+                
+                <li class="nav"><a href="#" class="support parent" title="Help And Support">Help And Support</a>
+                <span class="open-nav" title="Open/Close Help And Support Section">Open/Close Help And Support Section</span>
+                    <ul>
+                        <li class="sub"><a href="http://MetaGuard.Com" class="arrow" title="Home Page">Home Page</a></li>
+                        <li class="sub"><a href="http://Docs.MetaGuard.Com" class="arrow" title="Documentation">Documentation</a></li>
+                        <li class="sub"><a href="http://Bugs.MetaGuard.Com" class="arrow" title="Bug Reporting">Bug Reporting</a></li>
+<!--                        <li class="sub"><a href="#" class="arrow" title="Development">Development</a></li>
+                        <li class="sub"><a href="#" class="arrow" title="GitHub Repository">GitHub Repository</a></li>
+                        <li class="sub"><a href="#" class="arrow" title="IRC Channel">IRC Channel</a></li>-->
+                    </ul>
+                </li>
+                               
+            </ul>
+        </nav>
+        <!-- end navigation //-->
+    </aside>
+</div>
+<!-- end sidebar //-->
+<!-- start main -->
+<div id="oe_mainarea" class="cf">
+<aside class="message pagemcontainer" role="status"><p>Welcome to the LibreBSD.</p></aside>
+<article role="main" class="content-inner">
+<header class="pageheader cf"></header>
+<section class="cf">
+
+<div class="loading" style="text-align:center; display:none;">
+<br />
+<br />
+<br />
+<br />
+<br />
+<br />
+<br />
+<br />
+<br />
+<br />
+<img src="images/librebsd-loading.gif" /></div>
+
+<div id="pagecontainer">
+
+
+
+
+</div>
+</section>
+</article>
+</div>
+<!-- end main //-->
+<div class="spacer">
+    &nbsp;
+</div>
+</div>
+<!-- end content //-->
+<!-- start footer -->
+<footer id="oe_footer" class="cf">
+    <div class="footer-left">
+        <small class="copyright">LibreBSD&reg; 0.9 (Dobby The Elf). ©
+            2011-2013 by <a href="http://Network.MetaComplex.com">Metacomplex Network Division</a> Team.
+        </small>
+    </div>
+</footer>
+<!-- end footer //-->
+</div>
+<!-- end container //-->
+</body>
+</html>
