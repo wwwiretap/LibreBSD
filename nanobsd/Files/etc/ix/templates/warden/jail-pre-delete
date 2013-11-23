@@ -1,5 +1,0 @@
-#!/bin/sh
-
-. /etc/rc.librebsd
-
-jail_pre_delete "${JAILNAME}"
