@@ -1,0 +1,1083 @@
+#!/bin/sh
+#-
+# Copyright (c) 2010-2011 iXsystems, Inc., All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL iXsystems, Inc. OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+#
+# This file is heavily derived from both Sam Leffler's Avilia config,
+# as well as the BSDRP project's config file.  Neither of these have
+# an explicit copyright/license statement, but are implicitly BSDL.
+#
+
+#
+# LibreBSD specific bits of the common stuff.
+#
+
+# Override the defaults in nanobsd.sh from a common script.
+. "$AVATAR_ROOT/build/nano_env"
+# Helpful functions.
+. "$AVATAR_ROOT/build/functions.sh"
+
+if is_truenas ; then
+	. ${TRUENAS_COMPONENTS_ROOT}/nanobsd/os-base.truenas
+fi
+
+# DEBUG=1, etc.
+for feature in $SW_FEATURES; do
+	eval "$(echo "$feature")=1"
+done
+
+customize_cmd_truenas()
+{
+	if is_truenas ; then
+		customize_cmd $*
+	else
+		echo "Skipping TrueNAS specific command $*"
+	fi
+}
+
+NANO_BOOT0CFG="-o packet -s 1 -m 3 -t 18"
+
+# /var -> ~300MB (look through rc.initdiskless for the formula of how this
+# number is calculated out).
+# This is needed for samba as it drops a lot of files in /var/db/samba for
+# locking purposes when transferring large collections of data (~100MB for
+# ~4 TB in-flight data). I added overhead just in case, because when space
+# can't be obtained for /var/db/samba, smbd and nmbd have a nasty habit of
+# SIGABRTing and crashing, and this causes other applications to get unhappy
+# (vi and friends ;(..).
+#
+# Do NOT move this over to LibreBSD because of the lower memory constraints in
+# the project, and because this limit is in effect at boot. This is for better
+# built out systems. A lower default will be provided in LibreBSD instead.
+if is_truenas ; then
+	NANO_RAM_TMPVARSIZE=655360
+else
+	NANO_RAM_TMPVARSIZE=327680
+fi
+
+NANO_IMAGES=2
+# Remove .orig and .rej too
+# Removing X11 needs more work, it blows rdd + fonts
+NANO_IGNORE_FILES_EXPR=$(echo "$NANO_IGNORE_FILES_EXPR" | sed -e 's/)/|\.orig$|\.rej$)/')
+FlashDevice generic 2g
+
+if [ "$DEBUG" = 1 ]; then
+	DEBUG_BUILD="
+DEBUG_FLAGS=		-g
+"
+else
+	DEBUG_INSTALL="
+INSTALL_NODEBUG=	t
+"
+fi
+
+# NB: leave c++ enabled so devd can be built
+CONF_BUILD="
+#WITHOUT_ACPI=true
+WITHOUT_ATM=true
+WITHOUT_BIND_DNSSEC=true
+WITHOUT_BIND_ETC=true
+WITHOUT_BIND_LIBS_LWRES=true
+WITHOUT_BIND_NAMED=true
+WITHOUT_BLUETOOTH=true
+WITHOUT_CALENDAR=true
+WITHOUT_CLANG=true
+WITHOUT_CTM=true
+WITHOUT_CVS=true
+WITHOUT_DICT=true
+WITHOUT_EXAMPLES=true
+WITHOUT_FORTRAN=true
+WITHOUT_FREEBSD_UPDATE=yes
+WITHOUT_GAMES=true
+WITHOUT_GCOV=true
+WITHOUT_GPIB=true
+WITHOUT_HTML=true
+WITHOUT_I4B=true
+WITHOUT_IPFILTER=true
+WITHOUT_IPX=true
+WITHOUT_LIB32=true
+WITHOUT_LIBKSE=true
+# Required for proper terminal locale
+#WITHOUT_LOCALES=true
+WITHOUT_LPR=true
+WITHOUT_MAN=true
+WITHOUT_NDIS=true
+WITHOUT_NLS=true
+WITHOUT_NS_CACHING=true
+WITHOUT_OBJC=true
+WITHOUT_PORTSNAP=true
+WITHOUT_PPP=true
+WITHOUT_PROFILE=true
+WITHOUT_RCMDS=true
+WITHOUT_SENDMAIL=true
+# Knob needs to be fixed on systems that don't have the docs stuff
+# preinstalled, e.g. 9.x bsdinstall images.
+#WITHOUT_SHAREDOCS=true
+WITHOUT_SSP=true
+WITHOUT_SYSINSTALL=true
+# Telnet's a useful tool to have on the remote box.
+#WITHOUT_TELNET=true
+WITHOUT_WIRELESS=true
+WITHOUT_WPA_SUPPLICANT_EAPOL=true
+PYTHON_DEFAULT_VERSION=python2.7
+
+NOPORTDOCS=true
+
+LOCAL_DIRS=${NANO_LOCAL_DIRS}
+
+${DEBUG_BUILD}
+"
+if is_truenas ; then
+	CONF_BUILD="$CONF_BUILD
+WITH_OFED=true
+BOOT_COMCONSOLE_PORT=0x2f8
+BOOT_COMCONSOLE_SPEED=115200
+"
+fi
+CONF_INSTALL="$CONF_BUILD
+NO_INSTALL_MANPAGES=t
+# devel/apr sucks.
+WITH_BDB_VER=46
+
+${DEBUG_INSTALL}
+"
+# The following would help...
+# WITHOUT_TOOLCHAIN=true		can't build ports
+# WITHOUT_INSTALLLIB=true		libgcc.a
+#
+# from the build
+# WITHOUT_INFO=true			makeinfo
+# WITHOUT_RCS=true
+PKG_ONLY_MAKE_CONF="
+
+WITHOUT_CLANG=true
+WITHOUT_CLANG_IS_CC=true
+WITHOUT_GCC=true
+WITHOUT_INSTALLLIB=true
+WITHOUT_INFO=true
+WITHOUT_RCS=true
+WITHOUT_SHAREDOCS=true
+"
+
+if ! is_truenas ; then
+	PKG_ONLY_MAKE_CONF="${PKG_ONLY_MAKE_CONF}
+WITHOUT_TOOLCHAIN=true
+WITHOUT_BINUTILS=true
+"
+fi
+
+# Pull in common definitions.
+. ${NANO_CFG_BASE}/common
+
+customize_cmd build_debug_kernel
+customize_cmd install_debug_kernel
+
+if is_truenas ; then
+	add_port_with_repo "${NAS_PORTS}" sysutils/zfsd LOCALBASE=/
+fi
+
+add_port textproc/libxml2
+add_port devel/libffi
+add_port archivers/lzo2
+add_port www/aria2 OPTIONS_FILE_UNSET+=SQLITE
+add_port security/easy-rsa
+add_port security/openvpn
+add_port converters/libiconv
+add_port converters/iconv OPTIONS_FILE_UNSET+=CCSUTIL
+add_port devel/gettext
+add_port devel/pkgconf
+add_port devel/libpthread-stubs
+add_port devel/cdialog
+add_port dns/inadyn-mt
+add_port devel/pcre
+add_port editors/nano
+add_port ftp/proftpd
+if is_truenas ; then
+	add_port misc/cpuid
+fi
+add_port net-mgmt/bsnmp-ucd
+add_port net-mgmt/bsnmptools
+add_port net-mgmt/clog
+add_port net-mgmt/sipcalc
+add_port net/istgt
+if ! is_truenas ; then
+	add_port net/vblade
+fi
+add_port security/libgpg-error
+add_port security/libgcrypt
+add_port databases/db46
+add_port security/cyrus-sasl2
+add_port net/openldap24-sasl-client
+add_port net/nss_ldap
+add_port net/rsync OPTIONS_FILE_SET+=ACL OPTIONS_FILE_SET+=ICONV
+add_port lang/python27 OPTIONS_FILE_UNSET+=NLS
+add_port lang/python2
+add_port lang/python
+add_port dns/py-dnspython
+add_port devel/tevent
+add_port devel/talloc MAKE_JOBS_UNSAFE=y MAKE_JOBS_NUMBER=1
+add_port devel/libexecinfo
+add_port devel/popt
+add_port databases/tdb MAKE_JOBS_UNSAFE=y MAKE_JOBS_NUMBER=1
+add_port sysutils/libsunacl
+add_port net/samba36	OPTIONS_FILE_UNSET+=CUPS \
+	OPTIONS_FILE_SET+=ADS \
+	OPTIONS_FILE_SET+=AIO_SUPPORT \
+	OPTIONS_FILE_SET+=EXP_MODULES \
+	OPTIONS_FILE_SET+=PAM_SMBPASS \
+	OPTIONS_FILE_SET+=SYSLOG
+add_port security/pam_ldap
+add_port security/pam_mkhomedir
+add_port shells/bash OPTIONS_FILE_UNSET+=NLS
+add_port shells/ksh93
+add_port shells/mksh
+add_port shells/scponly
+add_port sysutils/e2fsprogs
+add_port sysutils/fusefs-libs
+add_port sysutils/fusefs-kmod OPTIONS_FILE_UNSET+=DOCS
+add_port devel/libublio
+add_port sysutils/fusefs-ntfs
+add_port sysutils/smartmontools
+add_port net/libdnet
+add_port emulators/open-vm-tools-nox11 WITHOUT_ICU=y
+if is_truenas ; then
+	add_port emulators/qemu WITHOUT_ADD_AUDIO=y WITHOUT_ALL_TARGETS=y WITHOUT_CDROM_DMA=y WITHOUT_CURL=y WITHOUT_GNS3=y WITHOUT_GNUTLS=y WITHOUT_KQEMU=y WITHOUT_BPF=y WITHOUT_RTL8139_TIMER=y WITHOUT_SAMBA=y WITHOUT_SDL=y
+fi
+add_port databases/sqlite3
+add_port databases/py-sqlite3
+add_port databases/py-bsddb3
+add_port devel/py-distribute
+add_port devel/py-sysctl
+add_port www/py-flup
+add_port www/py-django OPTIONS_FILE_SET+=FASTCGI
+add_port www/py-dojango
+add_port www/dojo
+add_port databases/py-south
+add_port devel/py-asn1
+add_port devel/py-asn1-modules
+add_port www/nginx OPTIONS_FILE_SET+=HTTP_DAV \
+		OPTIONS_FILE_SET+=HTTP_SSL \
+		OPTIONS_FILE_SET+=HTTP_UPLOAD \
+		OPTIONS_FILE_SET+=HTTP_UPLOAD_PROGRESS \
+		OPTIONS_FILE_SET+=STATUS
+add_port net-mgmt/net-snmp OPTIONS_FILE_UNSET+=PERL OPTIONS_FILE_UNSET+=PERL_EMBEDDED
+add_port sysutils/nut OPTIONS_FILE_UNSET+="NEON"
+add_port textproc/py-libxml2
+add_port textproc/expat2
+add_port devel/gamin
+#add_port devel/gio-fam-backend
+add_port devel/m4
+if is_truenas ; then
+	add_port devel/bison
+	add_port devel/libffi
+fi
+add_port misc/gnomehier
+add_port www/py-httplib2
+add_port net/py-oauth2
+add_port sysutils/jailme
+
+
+if [ "${REPORTING}" = 1 ]; then
+	add_port graphics/png
+	add_port devel/libstatgrab
+	add_port devel/libltdl
+	add_port print/freetype2
+	add_port x11/xproto
+	add_port x11-fonts/fontconfig
+	add_port x11-fonts/libfontenc
+	add_port x11-fonts/mkfontscale
+	add_port x11-fonts/mkfontdir
+	add_port x11-fonts/font-bh-ttf
+	add_port x11-fonts/font-misc-meltho
+	add_port x11-fonts/font-misc-ethiopic
+	add_port x11-fonts/bitstream-vera
+	add_port x11-fonts/font-util
+	add_port x11-fonts/encodings
+	add_port x11-fonts/dejavu
+	add_port x11-fonts/xorg-fonts-truetype
+	add_port x11/pixman
+	add_port graphics/cairo OPTIONS_FILE_UNSET+=X11 OPTIONS_FILE_UNSET+=XCB
+	add_port x11-toolkits/pango OPTIONS_FILE_UNSET+=X11
+	add_port devel/icu
+	add_port graphics/graphite2
+	add_port devel/glib20
+	add_port print/harfbuzz OPTIONS_FILE_UNSET+=X11 OPTIONS_FILE_UNSET+=XCB
+	add_port databases/rrdtool OPTIONS_FILE_UNSET+=PERL_MODULE \
+				OPTIONS_FILE_SET+=PYTHON_MODULE \
+				OPTIONS_FILE_SET+=JSON
+	add_port net/liboping
+	add_port net-mgmt/collectd5 OPTIONS_FILE_UNSET+=BIND OPTIONS_FILE_UNSET+=SNMP \
+				   OPTIONS_FILE_SET+=DISK OPTIONS_FILE_SET+=PYTHON \
+				   OPTIONS_FILE_SET+=RRDTOOL \
+				   OPTIONS_FILE_SET+=STATGRAB
+fi
+
+#FIXME: gobject now requires cairo as build dependency
+add_port devel/gobject-introspection
+add_port devel/py-ipaddr
+add_port converters/base64
+add_port emulators/mtools OPTIONS_FILE_UNSET+=X11
+add_port sysutils/arcconf
+add_port sysutils/tw_cli
+add_port sysutils/megacli
+if ! is_truenas ; then
+	add_port sysutils/areca-cli
+fi
+add_port net/py-ldap2 OPTIONS_FILE_SET+=SASL
+add_port sysutils/ataidle
+add_port sysutils/gnome_subr
+add_port devel/dbus OPTIONS_FILE_UNSET+=X11
+add_port devel/dbus-glib
+add_port devel/libdaemon
+add_port databases/gdbm
+add_port net/avahi-app
+add_port net/avahi-libdns
+add_port textproc/py-xml
+add_port sysutils/throttle
+add_port sysutils/dmidecode
+add_port sysutils/graid5
+add_port devel/libevent
+if ! is_truenas ; then
+	add_port devel/libevent2
+fi
+add_port sysutils/tmux
+if is_truenas ; then
+	add_port net/netatalk OPTIONS_FILE_SET+=PAM \
+		OPTIONS_FILE_SET+=ZEROCONF \
+		OPTIONS_FILE_SET+=LDAP \
+		OPTIONS_FILE_UNSET+=APPLETALK
+else
+	add_port devel/py-dbus
+	add_port net/netatalk3 OPTIONS_FILE_SET+=PAM \
+		OPTIONS_FILE_SET+=SENDFILE \
+		OPTIONS_FILE_SET+=LDAP
+fi
+
+add_port dns/libidn
+add_port ftp/wget
+add_port benchmarks/iozone
+add_port benchmarks/iperf
+add_port benchmarks/netperf
+add_port benchmarks/xdd
+add_port security/sudo
+add_port sysutils/ipmitool
+add_port www/py-django-json-rpc
+add_port devel/py-mimeparse
+add_port devel/py-six
+add_port devel/py-dateutil
+add_port devel/py-rose
+add_port www/py-django-tastypie
+add_port devel/py-lockfile
+add_port devel/py-daemon
+add_port devel/py-polib
+add_port devel/py-ujson
+add_port devel/py-simplejson
+if ! is_truenas ; then
+	add_port sysutils/bsdstats
+fi
+add_port www/wgetpaste
+add_port devel/py-greenlet
+add_port net/py-eventlet
+if is_truenas ; then
+	add_port sysutils/sg3_utils
+fi
+add_port graphics/jpeg
+add_port www/py-requests
+add_port sysutils/smp_utils
+
+#
+# These are all for SSSD
+# 
+add_port textproc/xmlcatmgr
+add_port textproc/libxslt
+add_port dns/c-ares
+add_port databases/ldb
+add_port devel/libunistring
+add_port devel/ding-libs
+add_port devel/nspr
+add_port security/nss
+add_port security/krb5
+add_port security/sssd
+
+if [ "${DEBUG}" = 1 ]; then
+
+	add_port security/ca_root_nss OPTIONS_FILE_SET+=ETCSYMLINK
+	add_port ftp/curl
+	add_port editors/vim-lite
+	add_port misc/py-pexpect
+	add_port devel/ipython OPTIONS_FILE_UNSET+=X11 OPTIONS_FILE_UNSET+=ZMQ
+	add_port devel/git OPTIONS_FILE_UNSET+=SVN \
+			OPTIONS_FILE_UNSET+=CVS \
+			OPTIONS_FILE_UNSET+=P4 \
+			OPTIONS_FILE_UNSET+=PERL \
+			OPTIONS_FILE_UNSET+=CONTRIB \
+			OPTIONS_FILE_UNSET+=NLS
+	add_port devel/ctags
+fi
+
+if [ "${NANO_PACKAGE_ONLY}" -eq 1 ]; then
+ 	CONF_INSTALL="${CONF_INSTALL}
+${PKG_ONLY_MAKE_CONF}
+"
+	echo "Automatically building a thin image with packages"
+else
+	echo "Automatically building a * * F A T * * image so we can build ports"
+fi
+
+VARS="MASTER_SITE_BACKUP MASTER_SITE_OVERRIDE PACKAGEROOT PACKAGESITE"
+
+for var in $VARS; do
+	val=$(eval echo "\$$var")
+	if [ -n "$val" ]; then
+		CONF_INSTALL="${CONF_INSTALL}
+$var=$val"
+	fi
+done
+
+if [ "$PACKAGE_PREP_BUILD" = 1 ]; then
+	echo "Skipping post-package customize steps"
+	do_image=false
+else
+hack_nsswitch_conf ( )
+{
+	# Remove all references to NIS in the nsswitch.conf file
+	# Not sure this is still needed, but LibreBSD has it...
+	sed -i.bak -es/nis/files/g ${NANO_WORLDDIR}/etc/nsswitch.conf
+	rm -f ${NANO_WORLDDIR}/etc/nsswitch.conf.bak
+}
+customize_cmd hack_nsswitch_conf
+
+save_build ( )
+{
+	VERSION_FILE=${NANO_WORLDDIR}/etc/version
+	if [ "${SVNREVISION}" = "${REVISION}" ]; then
+		echo "${NANO_NAME}" > "${VERSION_FILE}"
+	else
+		echo "${NANO_NAME} (${SVNREVISION})" > "${VERSION_FILE}"
+	fi
+}
+customize_cmd save_build
+
+add_pbi_manager()
+{
+	local pm dst
+	pm=${AVATAR_ROOT}/src/pcbsd/pbi-manager
+	dst=${NANO_WORLDDIR}/usr/local
+	df="${dst}/share/pcbsd/distfiles/"
+
+	pprint 2 "Adding pbi-manager"
+
+	mkdir -p ${dst}/sbin >/dev/null 2>/dev/null
+	cp ${pm}/pbi-manager ${dst}/sbin/pbi_create
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_add
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_addrepo
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_browser
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_autobuild
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_delete
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_deleterepo
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_icon
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_info
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_indextool
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_listrepo
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_makepatch
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_makeport
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_makerepo
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_metatool
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_patch
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_update
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi_update_hashdir
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbid
+	ln -f ${dst}/sbin/pbi_create ${dst}/sbin/pbi-crashhandler
+	rm -f ${dst}/pbi-manager
+
+	mkdir -p ${df} >/dev/null 2>/dev/null
+	cp ${pm}/repo/pcbsd.rpo ${df}/pcbsd.rpo
+}
+customize_cmd add_pbi_manager
+
+add_gui()
+{
+	local gui dst dstCR
+	gui=${AVATAR_ROOT}/gui
+	dstCR=/usr/local/www/librebsdUI
+	dst=${NANO_WORLDDIR}${dstCR}
+	if [ -d ${gui} ]; then
+	pprint 2 "Adding librebsd web gui"
+	mkdir ${dst}
+	( cd ${gui}
+	  find . | egrep -v "${NANO_IGNORE_FILES_EXPR}" | cpio -R root:wheel -dumpv ${dst} )
+	if is_truenas ; then
+		# Reporting is replaced by ana
+		rm -rf ${dst}/reporting
+		( cd ${TRUENAS_COMPONENTS_ROOT}/gui
+		  find . | egrep -v "${NANO_IGNORE_FILES_EXPR}" | cpio -R root:wheel -dumpv ${dst} )
+	fi
+	pprint 2 "Making librebsd initial database"
+	mkdir ${NANO_WORLDDIR}/data
+	CR "(cd ${dstCR}; python manage.py syncdb --noinput --migrate --traceback)"
+	CR "(cd ${dstCR}; python manage.py collectstatic --noinput)"
+	CR "(cd ${dstCR}; python tools/compilemsgs.py)"
+	CR "(cd /data; cp librebsd-v1.db factory-v1.db)"
+	CR "ln -sf /etc/local_settings.py ${dstCR}/local_settings.py"
+	CR "chown -R www:www ${dstCR} data"
+	if is_truenas ; then
+		add_gui_encrypted "$gui" "$dst" "$dstCR"
+	fi
+	else
+		pprint 2 "GUI OMITTED from image"
+	fi
+}
+customize_cmd add_gui
+
+add_autotune()
+{
+	local autotune autotune_src
+
+	# See ix-loader for more details.
+	autotune_src=$AVATAR_ROOT/src/autotune/files/autotune.py
+	autotune=$NANO_WORLDDIR/usr/local/bin/autotune
+	install -m 0755 $autotune_src $autotune
+}
+customize_cmd add_autotune
+
+customize_cmd_truenas add_licensor
+
+arch_specific_ko()
+{
+	cp ${AVATAR_ROOT}/src/kernel_modules/arcsas_${LIBREBSD_ARCH}.ko ${NANO_WORLDDIR}/boot/modules/arcsas.ko
+}
+if ! is_truenas ; then
+	customize_cmd arch_specific_ko
+fi
+
+add_pc_extractoverlay()
+{
+	local pce src dst pcbsd bin
+
+	pce="pc-extractoverlay"
+	src="${AVATAR_ROOT}/src/pcbsd/${pce}"
+	dst="${NANO_WORLDDIR}/usr/local"
+	pcbsd="${dst}/share/pcbsd"
+	bin="${dst}/bin"
+
+	pprint 2 "Adding pc-extractoverlay"
+
+	cp ${src}/${pce} ${bin}/${pce}
+	chmod 755 ${bin}/${pce}
+
+	mkdir -p ${dst}/etc
+	mkdir -p ${pcbsd}/conf
+	mkdir -p ${pcbsd}/distfiles
+
+	cp ${src}/server-excludes ${pcbsd}/conf
+	cp ${src}/server-overlay/usr/local/etc/pkg-pubkey.cert ${dst}/etc
+
+	tar -cvJf ${pcbsd}/distfiles/server-overlay.txz -C ${src}/server-overlay .
+}
+customize_cmd add_pc_extractoverlay
+
+add_warden()
+{
+	local wt src dst share hooks
+
+	wt="${AVATAR_ROOT}/nanobsd/Files/etc/ix/templates/warden"
+	src="${AVATAR_ROOT}/src/pcbsd/warden"
+	dst="${NANO_WORLDDIR}/usr/local"
+	share="${dst}/share/warden"
+	hooks="${share}/scripts/hooks"
+
+	pprint 2 "Adding warden"
+
+	mkdir -p ${dst}/etc >/dev/null 2>/dev/null
+	mkdir -p ${dst}/bin >/dev/null 2>/dev/null
+	mkdir -p ${share} >/dev/null 2>/dev/null
+	mkdir -p ${share}/tmp >/dev/null 2>/dev/null
+	mkdir -p ${share}/export >/dev/null 2>/dev/null
+
+	cp ${src}/bin/warden ${dst}/bin/warden
+	chmod 755 ${dst}/bin/warden
+
+	cp ${src}/pluginjail-packages ${share}/pluginjail-packages
+	chmod 644 ${share}/pluginjail-packages
+
+	cp ${src}/pcbsd-utils-packages ${share}/pcbsd-utils-packages
+	chmod 644 ${share}/pcbsd-utils-packages
+
+	cp ${src}/conf/warden.conf ${dst}/etc/warden.conf
+	chmod 644 ${dst}/etc/warden.conf
+
+	cp -r ${src}/linux-installs ${share}
+	cp -r ${src}/scripts ${share}
+	chmod 755 ${share}/scripts/backend/*
+
+	cp ${src}/scripts/rc.d/wardenrc ${dst}/etc/rc.d/wardenrc
+	chmod 755 ${dst}/etc/rc.d/wardenrc
+
+	cp ${src}/agent.png ${share}/
+	cp ${src}/agent.png ${share}/warden.png
+
+	mkdir -p ${share}/bin >/dev/null 2>/dev/null
+	mkdir -p ${hooks} >/dev/null 2>/dev/null
+
+	cp ${wt}/jail-* ${hooks}/
+	chmod 755 ${hooks}/jail-*
+}
+customize_cmd add_warden
+
+add_pcbsd_libsh()
+{
+	local src dst
+	src="${AVATAR_ROOT}/src/pcbsd/libsh"
+	dst="${NANO_WORLDDIR}/usr/local/share/pcbsd/scripts"
+
+	pprint 2 "Adding pcbsd libsh"
+
+	mkdir -p ${dst} >/dev/null 2>/dev/null
+
+	cp ${src}/functions.sh ${dst}/functions.sh
+	chmod 755 ${dst}/functions.sh
+}
+customize_cmd add_pcbsd_libsh
+
+add_pcbsd_xtrafiles()
+{
+	local src dst
+	src="${AVATAR_ROOT}/src/pcbsd/xtrafiles/local/share/pcbsd/conf"
+	dst="${NANO_WORLDDIR}/usr/local/share/pcbsd/conf"
+
+	pprint 2 "Adding pcbsd mirrors"
+
+	mkdir -p ${dst} >/dev/null 2>/dev/null
+
+	for xf in $(ls ${src})
+	do
+		cp ${src}/${xf} ${dst}/${xf}
+		chmod 644 ${dst}/${xf}
+	done
+}
+customize_cmd add_pcbsd_xtrafiles
+
+add_pbi_wrapper()
+{
+	local _pm 
+	local _ad
+	local _bd
+
+	_pm="${NANO_WORLDDIR}/usr/pbi/.pbiwrapper-${NANO_ARCH}"
+	_ad="${AVATAR_ROOT}/pbi"
+	_bd="${_ad}/${NANO_ARCH}"
+
+	pprint 2 "Adding PBI wrapper"
+
+	mkdir -p "${_bd}"
+	if [ ! -s "${_bd}/.pbiwrapper" ]
+	then
+		cp "${_pm}" "${_ad}/.pbiwrapper-${NANO_ARCH}"
+	fi
+}
+customize_cmd add_pbi_wrapper
+
+install_extract_tarball()
+{
+	mkdir -p ${NANO_WORLDDIR}/usr/local/bin
+	mv ${NANO_WORLDDIR}/usr/bin/extract-tarball \
+		${NANO_WORLDDIR}/usr/local/bin/extract-tarball
+}
+customize_cmd install_extract_tarball
+
+# Move the $world/data to the /data partion
+move_data()
+{
+	db=${NANO_WORLDDIR}/data
+	rm -rf ${NANO_DATADIR}
+	mkdir -p ${NANO_DATADIR}
+	( cd ${db} ; find . | cpio -R root:wheel -dumpv ${NANO_DATADIR} )
+	rm -rf ${db}
+}
+customize_cmd move_data
+
+add_data_to_fstab ( )
+{
+	(
+	cd ${NANO_WORLDDIR}
+	echo "/dev/${NANO_DRIVE}s4 /data ufs rw,noatime 2 2" >> etc/fstab
+	mkdir -p data
+	)
+	
+}
+customize_cmd add_data_to_fstab
+
+customize_cmd_truenas afpd_conf_symlink
+
+select_httpd ( )
+{
+	echo 'nginx_enable="YES"' >> ${NANO_WORLDDIR}/etc/rc.conf
+}
+customize_cmd select_httpd
+
+remove_patch_divots ( )
+{
+	find ${NANO_WORLDDIR} -name \*.orig -or -name \*.rej -delete
+}
+customize_cmd remove_patch_divots
+
+configure_mnt_md ( )
+{
+	mkdir -m 755 -p ${NANO_WORLDDIR}/conf/base/mnt
+	echo 2048 > ${NANO_WORLDDIR}/conf/base/mnt/md_size
+}
+customize_cmd configure_mnt_md
+
+shrink_md_fbsize()
+{
+	# We have a lot of little files on our memory disks. Let's decrease
+	# the block and frag size to fit more little files on them (this
+	# halves our space requirement by ~50% on /etc and /var on 8.x --
+	# and gives us more back on 9.x as the default block and frag size
+	# are 4 times larger).
+	sed -i '' -e 's,-S -i 4096,-S -i 4096 -b 4096 -f 512,' \
+		${NANO_WORLDDIR}/etc/rc.initdiskless
+}
+customize_cmd shrink_md_fbsize
+
+if [ "${DEBUG}" = 1 ]; then
+
+unmute_console_logging()
+{
+	# /var is small. Don't fill it up with messages from console.log
+	# because it's a chatty log.
+	sed -i '' -e 's/#console.info/console.info/' \
+			"${NANO_WORLDDIR}/etc/syslog.conf"
+}
+customize_cmd unmute_console_logging
+
+fi
+
+remove_var_db_pkg()
+{
+	# Eats up ~7 MB on the install image.
+	rm -Rf ${NANO_WORLDDIR}/var/db/pkg
+	# bsnmpd complains about no such directory found
+	mkdir ${NANO_WORLDDIR}/var/db/pkg
+}
+customize_cmd remove_var_db_pkg
+
+fix_easy_install_pth()
+{
+	local site_packages
+
+	site_packages="$NANO_WORLDDIR/usr/local/lib/$PYTHON_DEFAULT_VERSION/site-packages"
+
+	env PYTHONPATH=$site_packages \
+		python ${AVATAR_ROOT}/tools/sanitize_pth.py -f \
+		$site_packages
+}
+customize_cmd fix_easy_install_pth
+
+create_var_home_symlink()
+{
+	# Create a link to a non-persistent location that ix-activedirectory
+	# and ix-ldap can use as a pointer to a home directory on persistent
+	# storage (/mnt/tank/homes, etc).
+	rm -f $NANO_WORLDDIR/home || :
+	rm -Rf $NANO_WORLDDIR/home
+	ln -sfh /var/home $NANO_WORLDDIR/home
+}
+customize_cmd create_var_home_symlink
+
+librebsd_custom()
+{
+	compress_ko()
+	{
+# XXX: If we want to Dtrace the kernel it cannot be compressed
+#		if [ -f ${NANO_WORLDDIR}/boot/kernel/$1 ]; then
+#			gzip -v9 ${NANO_WORLDDIR}/boot/kernel/$1
+#		fi
+	}
+
+	# Compress the kernel and preloaded modules
+	compress_ko kernel
+	compress_ko fuse.ko
+	compress_ko geom_mirror.ko
+	compress_ko geom_stripe.ko
+	compress_ko geom_raid3.ko
+	compress_ko geom_gate.ko
+
+	# nuke .pyo files
+	find ${NANO_WORLDDIR}/usr/local -name '*.pyo' | xargs rm -f
+
+	# kill includes (saves 14MB)
+	find ${NANO_WORLDDIR}/usr/local/include \! -name 'pyconfig.h' -type f | xargs rm -f
+
+	# kill docs (saves 22MB)
+	rm -rf ${NANO_WORLDDIR}/usr/local/share/doc
+	rm -rf ${NANO_WORLDDIR}/usr/local/share/gtk-doc
+
+	# kill gobject introspection xml
+	rm -rf ${NANO_WORLDDIR}/usr/local/share/gir-1.0
+
+	# and info (2MB)
+	rm -rf ${NANO_WORLDDIR}/usr/local/info
+
+	# and man pages (4.4MB)
+	rm -rf ${NANO_WORLDDIR}/usr/local/man
+
+	# and examples (1.7M)
+	rm -rf ${NANO_WORLDDIR}/usr/local/share/examples
+
+	# and groff_fonts junk (3MB)
+	rm -rf ${NANO_WORLDDIR}/usr/share/groff_font
+	rm -rf ${NANO_WORLDDIR}/usr/share/tmac
+	rm -rf ${NANO_WORLDDIR}/usr/share/me
+
+	# Kill all .a's and .la's that are installed (20MB+)
+	find ${NANO_WORLDDIR} -name \*.a -or -name \*.la -delete
+
+	# magic.mgc is just a speed optimization.  Kill it for 1.7MB
+	rm -f ${NANO_WORLDDIR}/usr/share/misc/magic.mgc
+
+	# strip binaries (saves spaces on non-debug images).
+	if [ "${DEBUG}" != 1 ]; then
+		pprint 4 "Stripping binaries and libraries"
+		for dir in $(find ${NANO_WORLDDIR}/usr/local -name '*bin' -or -name 'libexec' -maxdepth 3); do
+			for f in $(find $dir -type f); do
+				strip 2>/dev/null $f || :
+			done
+		done
+		# .so's are the only thing that need to be stripped. The rest
+		# should remain untouched.
+		for f in $(find ${NANO_WORLDDIR}/usr/local/lib -name '*.so' -or -name '*.so.*' -maxdepth 3); do
+			strip 2>/dev/null $f || :
+		done
+	fi
+
+	# We dont need proftpd blacklist.dat.sample, takes up too much space in /etc
+	rm -f ${NANO_WORLDDIR}/conf/base/etc/local/proftpd/blacklist.dat.sample
+
+	# Last second tweaks
+	chown -R root:wheel ${NANO_WORLDDIR}/root
+	chmod 0755 ${NANO_WORLDDIR}/root/*
+	chmod 0755 ${NANO_WORLDDIR}/*
+	chmod 0440 ${NANO_WORLDDIR}/usr/local/etc/sudoers
+	chown -R root:wheel ${NANO_WORLDDIR}/etc
+	chown -R root:wheel ${NANO_WORLDDIR}/boot
+	chown root:wheel ${NANO_WORLDDIR}/
+	chown root:wheel ${NANO_WORLDDIR}/usr
+	find ${NANO_WORLDDIR} -type f -name "*~" -delete
+	find ${NANO_WORLDDIR}/usr/local -type f -name "*.po" -delete
+	find ${NANO_WORLDDIR} -type f -name "*.service" -delete
+	mkdir ${NANO_WORLDDIR}/data/zfs
+	ln -s /usr/local/bin/bash ${NANO_WORLDDIR}/bin/bash
+	ln -s /data/zfs/zpool.cache ${NANO_WORLDDIR}/boot/zfs/zpool.cache
+
+	# This is wrong.  Needs a way to tell kernel how to find the mount utility
+	# instead.
+	mv ${NANO_WORLDDIR}/sbin/mount_ntfs ${NANO_WORLDDIR}/sbin/mount_ntfs-kern
+	ln -s /usr/local/bin/ntfs-3g ${NANO_WORLDDIR}/sbin/mount_ntfs
+
+}
+late_customize_cmd librebsd_custom
+
+fi # [ $PACKAGE_PREP_BUILD = 1 ]
+
+if $do_image; then
+last_orders() {
+	local cd_image_log
+	local full_image full_image_log
+	local firmware_img gui_upgrade_bname gui_upgrade_image_log
+
+	cd_image_log="${MAKEOBJDIRPREFIX}/_.cd_iso"
+	full_image_log="${MAKEOBJDIRPREFIX}/_.full_image"
+	gui_image_log="${MAKEOBJDIRPREFIX}/_.gui_image"
+
+	firmware_img="$NANO_DISKIMGDIR/firmware.img"
+	full_image="$NANO_DISKIMGDIR/$NANO_IMGNAME.img"
+	gui_upgrade_bname="$NANO_DISKIMGDIR/$NANO_IMGNAME.GUI_Upgrade"
+
+	if $do_copyout_partition; then
+
+		pprint 2 "Compressing GUI upgrade image"
+		log_file "${gui_image_log}"
+
+		(
+		set -x
+
+		# NOTE: keep in synch with create_*_diskimage.
+		mv "$NANO_DISKIMGDIR/_.disk.image" "$firmware_img"
+
+		# the -s arguments map root's "update*" files into the
+		# gui image's bin directory.
+		tar -cpvf - \
+			-s '@^update$@bin/update@' \
+			-s '@^updatep1$@bin/updatep1@' \
+			-s '@^updatep2$@bin/updatep2@' \
+			-C "$AVATAR_ROOT/nanobsd/Files/root" \
+				update updatep1 updatep2 \
+			-C "$NANO_WORLDDIR" \
+				etc/avatar.conf \
+			-C "$AVATAR_ROOT/nanobsd/Installer" \
+				. \
+			-C "$AVATAR_ROOT/nanobsd/GUI_Upgrade" \
+				. \
+			-C "$NANO_DISKIMGDIR" \
+				${firmware_img##*/} \
+			| ${NANO_XZ} -9 -cz > "$gui_upgrade_bname.txz"
+		) > "${gui_image_log}" 2>&1
+		(
+		cd $NANO_DISKIMGDIR
+		sha256_signature=`sha256 ${NANO_IMGNAME}.GUI_Upgrade.txz`
+		echo "${sha256_signature}" > ${NANO_IMGNAME}.GUI_Upgrade.txz.sha256.txt
+		)
+	fi
+
+	pprint 2 "Compressing full disk image"
+	log_file "${full_image_log}"
+
+	(
+	set -x
+
+	# NOTE: keep in synch with create_iso.sh.
+	# NOTE: this is still needed after the .txz payload has been
+	# added because pc-sysinstall doesn't support raw images
+	# (-.-).
+	mv "$NANO_DISKIMGDIR/$NANO_IMGNAME" "$full_image"
+	time ${NANO_XZ} --verbose -9 -f "$full_image"
+
+	) > "${full_image_log}" 2>&1
+	(
+	cd $NANO_DISKIMGDIR
+	sha256_signature=`sha256 ${NANO_IMGNAME}.img.xz`
+	echo "${sha256_signature}" > ${NANO_IMGNAME}.img.xz.sha256.txt
+	)
+
+	pprint 2 "Creating ISO image"
+	log_file "${cd_image_log}"
+
+	(
+	set -x
+
+	sh "$AVATAR_ROOT/build/create_iso.sh"
+
+	) > "${cd_image_log}" 2>&1
+
+}
+fi # $do_image
+
+
+build_kernel2 ( ) (
+	local _kernel=$1
+	if [ -z "$1" ] ; then
+		_kernel=${NANO_KERNEL}
+	fi
+	local _logfile="${MAKEOBJDIRPREFIX}/_.bk_$(basename ${_kernel})"
+
+	pprint 2 "build kernel ($_kernel)"
+	log_file "${_logfile}"
+
+	(
+	if [ -f ${_kernel} ] ; then
+		kernconfdir=$(realpath $(dirname ${_kernel}))
+		kernconf=$(basename ${_kernel})
+	else
+		kernconf=${_kernel}
+	fi
+
+	cd ${NANO_SRC};
+	# unset these just in case to avoid compiler complaints
+	# when cross-building
+	unset TARGET_CPUTYPE
+	unset TARGET_BIG_ENDIAN
+	# Note: We intentionally build all modules, not only the ones in
+	# NANO_MODULES so the built world can be reused by multiple images.
+	env \
+		TARGET=${NANO_ARCH%:*} \
+		TARGET_ARCH=${NANO_ARCH##*:} \
+		${NANO_PMAKE} \
+		buildkernel -DNO_KERNELCLEAN \
+		${kernconfdir:+"KERNCONFDIR="}${kernconfdir} \
+		KERNCONF=${kernconf} \
+		MODULES_OVERRIDE="${NANO_MODULES}" \
+		SRCCONF=${SRCCONF} \
+		__MAKE_CONF=${NANO_MAKE_CONF_BUILD} \
+	) > ${_logfile} 2>&1
+)
+
+install_kernel2 ( ) (
+	local _kernel=$1
+	local _kodir=$2
+
+	if [ -z "$1" ] ; then
+		_kernel=${NANO_KERNEL}
+	fi
+	if [ -z "$2" ] ; then
+		_kodir=/boot/kernel
+	fi
+
+	local _logfile="${NANO_OBJ}/_.ik_$(basename ${_kernel})"
+	pprint 2 "install kernel ($_kernel)"
+	log_file "${_logfile}"
+
+	(
+	if [ -f ${_kernel} ] ; then
+		kernconfdir=$(realpath $(dirname ${_kernel}))
+		kernconf=$(basename ${_kernel})
+	else
+		kernconf=${_kernel}
+	fi
+
+	cd ${NANO_SRC}
+	env \
+		TARGET=${NANO_ARCH%:*} \
+		TARGET_ARCH=${NANO_ARCH##*:} \
+		${NANO_PMAKE} \
+		installkernel \
+		INSTALL_NODEBUG= \
+		DESTDIR=${NANO_WORLDDIR} \
+		${kernconfdir:+"KERNCONFDIR="}${kernconfdir} \
+		KERNCONF=${kernconf} \
+		KODIR=${_kodir} \
+		MODULES_OVERRIDE="${NANO_MODULES}"
+		SRCCONF=${SRCCONF} \
+		__MAKE_CONF=${NANO_MAKE_CONF_INSTALL} \
+	) > ${_logfile} 2>&1
+)
+
+build_debug_kernel ( ) 
+{
+	local _kernconfdir=$(dirname ${NANO_KERNEL})
+	local _kernconf=$(basename ${NANO_KERNEL})
+
+	(
+	cd ${_kernconfdir}
+	cat $_kernconf $NANO_CFG_BASE/DEBUG > ${NANO_OBJ}/${_kernconf}-DEBUG
+	)
+
+	build_kernel2 ${NANO_OBJ}/${_kernconf}-DEBUG /boot/kernel-debug
+}
+
+install_debug_kernel ( )
+{
+	local _kernconf=$(basename ${NANO_KERNEL})
+
+	install_kernel2  ${NANO_OBJ}/${_kernconf}-DEBUG  /boot/kernel-debug
+}

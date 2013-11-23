@@ -24,7 +24,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# $FreeBSD$
+# $FreeBSD: stable/8/tools/tools/nanobsd/gateworks/Files/root/updatep1 189084 2009-02-26 19:44:52Z sam $
 #
 # Script to update partition 1 on a NanoBSD system.
 #
@@ -32,23 +32,52 @@
 #	ssh somewhere cat image.s1 | sh updatep1
 #
 
+PARTNUM=1
+OTHER_PARTNUM=2
+
 set -e
 
 . /etc/nanobsd.conf
 
-if mount | grep ${NANO_DRIVE}s1 > /dev/null ; then
-	echo "You are running partition 1 already"
-	echo "you probably want to use 'updatep2' instead"
+if mount | grep ${NANO_DRIVE}s$PARTNUM > /dev/null ; then
+	echo "You are running partition $PARTNUM already"
+	echo "you probably want to use 'updatep$OTHER_PARTNUM' instead"
 	exit 1
 fi
 
+LABELNAME=`echo ${NANO_DRIVE} | cut -f2 -d/`
+TARGET_DRIVE=`glabel status | awk '/ufs\/'${LABELNAME}s${OTHER_PARTNUM}a/' { print $3; }' | sed -e s,s${OTHER_PARTNUM}a,,`
+
 # Blow away old system.
-dd if=/dev/zero of=/dev/${NANO_DRIVE}s1 bs=1m count=1 > /dev/null 2>&1
+dd if=/dev/zero of=/dev/${TARGET_DRIVE}s$PARTNUM bs=1m count=1 > /dev/null 2>&1
 
 # Copy in new system
-dd of=/dev/${NANO_DRIVE}s1 obs=64k
+dd if=$1 of=/dev/${TARGET_DRIVE}s$PARTNUM obs=128k conv=sparse 2>> /tmp/.upgrade_dd &
+echo $! > /tmp/.upgrade_dd
+wait
 
 # Check that it worked
-fsck_ffs -n /dev/${NANO_DRIVE}s1a
+fsck_ffs -n /dev/${TARGET_DRIVE}s${PARTNUM}a
+tunefs -L ${LABELNAME}s${PARTNUM}a /dev/${TARGET_DRIVE}s${PARTNUM}a
 
-gpart set -a active -i 1 ${NANO_DRIVE}
+tmpdir=$(mktemp -d /mnt/tmp.XXXXXX)
+
+# Save all files which exist under / that should persist across upgrades (root
+# ssh keys, fusionio utilities, etc).
+
+mount -o noatime /dev/${TARGET_DRIVE}s${PARTNUM}a $tmpdir
+trap "umount $tmpdir" 1 2 15 EXIT
+
+dirs="/root/.ssh /usr/local/fusion-io"
+for dir in $dirs
+do
+	if [ -d $dir ]
+	then
+		tar cpf - $dir | tar -xpvf - -C $tmpdir
+	fi
+done
+
+umount $tmpdir
+trap - 1 2 15 EXIT
+
+gpart set -a active -i $PARTNUM ${TARGET_DRIVE}

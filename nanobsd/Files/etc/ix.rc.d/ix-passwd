@@ -1,0 +1,94 @@
+#!/bin/sh
+#
+# $FreeBSD$
+#
+
+# PROVIDE: ix-passwd
+# REQUIRE: mountcritlocal
+# BEFORE: ix-zfs
+
+. /etc/rc.librebsd
+
+generate_master.passwd()
+{
+
+	local IFS="|"
+	local f="bsdusr_username bsdusr_unixhash bsdusr_uid bsdgrp_gid bsdusr_full_name bsdusr_home bsdusr_shell bsdusr_password_disabled bsdusr_locked"
+	eval local $f
+	local sf=$(var_to_sf $f)
+
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT
+		$sf
+	FROM
+		account_bsdusers AS u
+        INNER JOIN account_bsdgroups AS g
+                ON u.bsdusr_group_id=g.id" | \
+	while eval read $f; do
+		local passwd="${bsdusr_unixhash}"
+		if [ "${bsdusr_password_disabled}" -eq 1 ]; then
+			passwd="*"
+		elif [ "${bsdusr_locked}" -eq 1 ]; then
+			passwd="*LOCKED*"
+		fi
+		echo "${bsdusr_username}:${passwd}:${bsdusr_uid}:${bsdgrp_gid}::0:0:${bsdusr_full_name}:${bsdusr_home}:${bsdusr_shell}"
+	done > /etc/master.passwd
+
+	if dirsrv_enabled nis
+	then
+		echo "${NIS_PWDSTR}" >> /etc/master.passwd
+	fi
+}
+
+group_membership()
+{
+	local IFS="|"
+	local f="bsdusr_username"
+	eval local $f
+	local sf=$(var_to_sf $f)
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT
+		$sf
+	FROM
+		account_bsdgroupmembership AS m
+	CROSS JOIN
+		account_bsdusers AS u
+		ON m.bsdgrpmember_user_id = u.id
+	WHERE
+		bsdgrpmember_group_id=$1" | tr \\n ,
+}
+
+generate_group()
+{
+	local IFS="|"
+	local f="bsdgrp_group bsdgrp_gid id"
+	eval local $f
+	local sf=$(var_to_sf $f)
+
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT
+		$sf
+	FROM
+		account_bsdgroups" | \
+	while eval read $f; do
+		echo -n "${bsdgrp_group}:*:${bsdgrp_gid}:"
+		group_membership ${id} | sed -e 's/,$//g' | tr -d \\n
+		echo
+	done > /etc/group
+
+	if dirsrv_enabled nis
+	then
+		echo "${NIS_GRPSTR}" >> /etc/group
+	fi
+}
+
+generate_all()
+{
+	generate_group
+	generate_master.passwd
+	pwd_mkdb -p /etc/master.passwd
+}
+
+name="ix-passwd"
+start_cmd='generate_all'
+stop_cmd=':'
+
+load_rc_config $name
+run_rc_command "$1"

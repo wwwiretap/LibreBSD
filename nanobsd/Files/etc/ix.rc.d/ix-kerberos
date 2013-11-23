@@ -1,0 +1,99 @@
+#!/bin/sh
+#
+# $FreeBSD$
+#
+
+# PROVIDE: ix-kerberos
+# BEFORE: kerberos
+
+. /etc/rc.librebsd
+
+: ${PATH_KRB5_TEMPLATE:="/etc/ix/templates/kerberos/krb5.conf"}
+: ${PATH_KRB5_CONFIG:="/etc/krb5.conf"}
+
+generate_krb5_conf()
+{
+	AD_init
+
+	local krbhost=$(AD_get ad_krbhost)
+	local krbport=$(AD_get ad_krbport)
+	local krbsvc=$(AD_get ad_krbsvc)
+	local kpwdhost=$(AD_get ad_kpwdhost)
+	local kpwdport=$(AD_get ad_kpwdport)
+	local domainname=$(AD_get ad_domainname)
+	local template="${PATH_KRB5_TEMPLATE}"
+
+	AD_log "generate_krb5_conf: krbhost=${krbhost}, kpwdhost=${kpwdhost}, " \
+		"domainname=${domainname}"
+
+	if [ ! -f "${template}" ]
+	then
+		return 1
+	fi
+
+	awk -v realm="${domainname}" \
+		-v krbhost="${krbhost}" \
+		-v krbport="${krbport}" \
+		-v krbsvc="${krbsvc}" \
+		-v kpwdhost="${kpwdhost}" \
+		-v kpwdport="${kpwdport}" \
+	'
+	BEGIN {
+		kdc = tolower(krbhost);
+		if (krbsvc) {
+			kdc = sprintf("%s/%s", tolower(krbsvc), kdc);
+		}
+		if (krbport) {
+			kdc = sprintf("%s:%d", kdc, krbport);
+		}
+		admin_server = tolower(krbhost);
+		if (krbport) {
+			admin_server = sprintf("%s:%d", admin_server, krbport);
+		}
+		kpwd = tolower(kpwdhost);
+		if (kpwdport) {
+			kpwd = sprintf("%s:%d", kpwd, kpwdport);
+		}
+
+		vars["@@UPPER_REALM@@"]  = toupper(realm);	
+		vars["@@LOWER_REALM@@"]  = tolower(realm);	
+		vars["@@ADMIN_SERVER@@"]  = admin_server;	
+		vars["@@KPASSWD_SERVER@@"] = kpwd;
+		vars["@@DOMAIN@@"]  = tolower(realm);
+		vars["@@KDC@@"]  = kdc;	
+	}
+	{
+		if (/@@.+@@/) {
+			for (var in vars) {
+				gsub(var, vars[var]);
+			}
+		}
+
+		print $0;
+	}
+	' < "${template}" > "${PATH_KRB5_CONFIG}"
+
+	local IFS="
+"
+	for line in $(verify_krb5_conf 2>&1) 
+	do
+		AD_log "generate_krb5_conf: ${line}"
+	done
+
+	return 0
+}
+
+generate_kerberos_files()
+{
+	if dirsrv_enabled activedirectory
+	then
+		generate_krb5_conf
+	fi
+}
+
+name="ix-kerberos"
+start_cmd='generate_kerberos_files'
+stop_cmd=':'
+        
+load_rc_config $name
+run_rc_command "$1"

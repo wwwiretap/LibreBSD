@@ -1,0 +1,132 @@
+#!/bin/sh
+#
+# $FreeBSD$
+#
+
+# PROVIDE: ix-crontab
+# REQUIRE: LOGIN
+# BEFORE: cron
+
+. /etc/rc.subr
+
+generate_crontab()
+{
+	local IFS="|"
+	local f="cron_minute cron_hour cron_daymonth cron_month cron_dayweek cron_user cron_command cron_stdout cron_stderr"
+	eval local $f
+	local sf=$(var_to_sf $f)
+	local cron_PATH="/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:/root/bin"
+	cp /conf/base/etc/crontab /etc/crontab
+	# Generate cronjobs
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} \
+	"SELECT $sf FROM system_cronjob WHERE cron_enabled = 1 ORDER BY id" | \
+	while eval read -r $f; do
+		# Note that echo -e will do the wrong thing with certain characters. Read the commit
+		# history for more details.
+		echo -n "${cron_minute}	${cron_hour}	${cron_daymonth}	${cron_month}	${cron_dayweek}	${cron_user}	PATH=\"$cron_PATH\" ${cron_command}"
+		if [ ${cron_stdout} -eq 1 ]; then
+			echo -n " > /dev/null"
+		fi
+		if [ ${cron_stderr} -eq 1 ]; then
+			echo -n " 2> /dev/null"
+		fi
+		echo
+	done >> /etc/crontab
+
+	local f="rsync_path rsync_mode rsync_minute rsync_hour rsync_daymonth rsync_month rsync_dayweek rsync_user rsync_remotehost rsync_remoteport rsync_remotemodule rsync_remotepath rsync_direction rsync_recursive rsync_times rsync_compress rsync_archive rsync_delete rsync_quiet rsync_preserveperm rsync_preserveattr rsync_extra"
+	eval local $f
+	local sf=$(var_to_sf $f)
+	local rsync_command
+	# Gnerate rsync
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} \
+	"SELECT $sf FROM system_rsync WHERE rsync_enabled = 1 ORDER BY id" | \
+	while eval read -r $f; do
+		rsync_command=$(
+			echo -n "lockf -s -t 0 -k '${rsync_path}' rsync "
+
+			if [ ${rsync_recursive} -gt 0 ]; then
+				echo -n "-r "
+			fi
+
+			if [ ${rsync_times} -gt 0 ]; then
+				echo -n "-t "
+			fi
+
+			if [ ${rsync_compress} -gt 0 ]; then
+				echo -n "-z "
+			fi
+
+			if [ ${rsync_archive} -gt 0 ]; then
+				echo -n "-a "
+			fi
+
+			if [ ${rsync_delete} -gt 0 ]; then
+				echo -n "--delete "
+			fi
+
+			if [ ${rsync_preserveperm} -gt 0 ]; then
+				echo -n "-p "
+			fi
+
+			if [ ${rsync_preserveattr} -gt 0 ]; then
+				echo -n "-X "
+			fi
+
+			echo -n "${rsync_extra} "
+
+			if [ "${rsync_mode}" = "module" ]; then
+				if [ "${rsync_direction}" = "push" ]; then
+					echo -n "'${rsync_path}' ${rsync_remotehost}::${rsync_remotemodule}"
+				else
+					echo -n "${rsync_remotehost}::${rsync_remotemodule} '${rsync_path}'"
+				fi
+			else
+				echo -n "-e 'ssh -p ${rsync_remoteport} -o BatchMode=yes -o StrictHostKeyChecking=yes' "
+				if [ "${rsync_direction}" = "push" ]; then
+					echo -n "'${rsync_path}' ${rsync_remotehost}:'${rsync_remotepath}'"
+				else
+					echo -n "${rsync_remotehost}:'${rsync_remotepath}' '${rsync_path}'"
+				fi
+			fi
+
+			if [ ${rsync_quiet} -gt 0 ]; then
+				echo -n " >/dev/null 2>&1"
+			fi
+
+		)
+		# Note that echo -e will do the wrong thing with certain characters. Read the commit
+		# history for more details.
+		echo "${rsync_minute}	${rsync_hour}	${rsync_daymonth}	${rsync_month}	${rsync_dayweek}	${rsync_user}	PATH=\"$cron_PATH\" ${rsync_command} 2>&1 |/usr/bin/logger -t rsync" >> /etc/crontab
+	done
+
+	local f="scrub_threshold scrub_minute scrub_hour scrub_daymonth scrub_month scrub_dayweek vol_name"
+	eval local $f
+	local sf=$(var_to_sf $f)
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} \
+	"SELECT $sf FROM storage_scrub s, storage_volume v WHERE s.scrub_volume_id = v.id AND scrub_enabled = 1 ORDER BY v.id" | \
+	while eval read -r $f; do
+		# Note that echo -e will do the wrong thing with certain characters. Read the commit
+		# history for more details.
+		echo "${scrub_minute}	${scrub_hour}	${scrub_daymonth}	${scrub_month}	${scrub_dayweek}	root	PATH=\"$cron_PATH\" /usr/local/sbin/scrub -t ${scrub_threshold} ${vol_name}" >> /etc/crontab
+	done
+
+	# For periodic snapshot.
+	snaptasks=`${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT COUNT(id) FROM storage_task WHERE task_enabled = 1;"`
+	if [ ${snaptasks} -gt 0 ]; then
+		echo "*	*	*	*	*	root	/usr/local/bin/python /usr/local/www/librebsdUI/tools/autosnap.py > /dev/null 2>&1" >> /etc/crontab
+	else
+		echo "15	4	*	*	6	root	/usr/local/bin/python /usr/local/www/librebsdUI/tools/autosnap.py > /dev/null 2>&1" >> /etc/crontab
+	fi
+}
+
+original_crontab()
+{
+	cp /conf/base/etc/crontab /etc/crontab
+}
+
+name="ix-crontab"
+start_cmd='generate_crontab'
+stop_cmd='original_crontab'
+
+load_rc_config $name
+run_rc_command "$1"
