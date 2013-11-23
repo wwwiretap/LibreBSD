@@ -1,0 +1,5 @@
+#!/bin/sh
+
+. /etc/rc.librebsd
+
+jail_post_delete "${JAILNAME}"

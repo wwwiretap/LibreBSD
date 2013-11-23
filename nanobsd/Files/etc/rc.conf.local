@@ -1,0 +1,475 @@
+#!/bin/sh
+# THIS FILE IS RESERVED FOR THE EXCLUSIVE USE OF LIBREBSD CONFIG SYSTEM.
+# Please edit /etc/rc.conf instead.
+
+#-
+# Copyright (c) 2010, 2011 iXsystems, Inc., All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL Jordan Hubbard OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+#
+
+. /etc/rc.librebsd
+
+
+http_ssl_enabled()
+{
+	local ssl=$(${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "
+		SELECT
+			stg_guiprotocol
+		FROM
+			system_settings
+		WHERE
+			stg_guiprotocol = 'https'
+		ORDER BY
+			-id
+		LIMIT 1
+	")
+
+	if [ -n "${ssl}" ]
+	then
+		return 0
+	fi
+
+	return 1
+}
+
+ftp_tls_enabled()
+{
+	local ssl=$(${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "
+		SELECT
+			ftp_tls
+		FROM
+			services_ftp
+		ORDER BY
+			-id
+		LIMIT 1
+	")
+
+	if [ "${ssl}" -gt "0" ]
+	then
+		return 0
+	fi
+
+	return 1
+}
+
+_interface_config()
+{
+	local IFS=\|
+	local interface_id interface dodhcp ipv4addr ipv4netmask doipv6auto ipv6addr ipv6netmask options
+	local lagg_id laggproto lagg_physnic lagg_deviceoptions
+	local vlan_vint vlan_pint vlan_tag
+
+	if [ `${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT COUNT(id) FROM network_interfaces"` -eq 0 ]; then
+		echo "ifconfig_DEFAULT=\"DHCP\""
+	fi
+
+	# Note: ipv4/ipv6 are supposed in ip/masklen format.
+
+	# Traverse the network interface table and generate rc.conf style
+	# configuration.
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT id, int_interface, int_dhcp, int_ipv4address, int_v4netmaskbit, int_ipv6auto, int_ipv6address, int_v6netmaskbit, int_options FROM network_interfaces ORDER BY id" | \
+	while read interface_id interface dodhcp ipv4addr ipv4netmask doipv6auto ipv6addr ipv6netmask options; do
+		echo -n ifconfig_${interface}=\"
+		if [ "${dodhcp}" = "1" ]; then
+			echo -n "DHCP"
+		elif [ -n "${ipv4addr}" ]; then
+			echo -n "inet ${ipv4addr}/${ipv4netmask} "
+		fi
+		# Hook to support lagg(4) interfaces
+		lagg_id=`${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT id FROM network_lagginterface WHERE lagg_interface_id = ${interface_id}"`
+		if [ -n "${lagg_id}" ]; then
+			laggproto=`${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT lagg_protocol FROM network_lagginterface WHERE lagg_interface_id = ${interface_id}"`
+			echo -n " laggproto ${laggproto}"
+			${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT lagg_physnic FROM network_lagginterfacemembers WHERE lagg_interfacegroup_id=${lagg_id} ORDER BY lagg_ordernum" | \
+			while read lagg_physnic; do
+				echo -n " laggport ${lagg_physnic}"
+			done
+		else
+			if [ -n "${options}" ]; then
+				echo -n " ${options}"
+			fi
+		fi
+		echo \"
+
+		local aliases has_ipv6
+		aliases=$(${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT id, alias_v4address, alias_v4netmaskbit, alias_v6address, alias_v6netmaskbit FROM network_alias WHERE alias_interface_id = ${interface_id} ORDER BY id" | \
+		while read alias_id v4addr v4netmask v6addr v6netmask; do
+			eval counter=\${counter_${interface}:-0}
+			if [ -n "${v4addr}" ]; then
+				echo "ifconfig_${interface}_alias${counter}=\"inet ${v4addr}/${v4netmask}\""
+				eval "counter_${interface}=\$((counter+1))"
+			fi
+			if [ -n "${v6addr}" ]; then
+				echo "ifconfig_${interface}_alias${counter}=\"inet6 ${v6addr}/${v6netmask}\""
+				eval "counter_${interface}=\$((counter+1))"
+			fi
+		done)
+		echo ${aliases}
+		has_ipv6=$(echo ${aliases}|grep -c inet6)
+
+		if [ "${doipv6auto}" = "0" ]; then
+			if [ -n "${ipv6addr}" ]; then
+				echo ifconfig_${interface}_ipv6=\"${ipv6addr}/${ipv6netmask}\"
+			elif [ ${has_ipv6} -gt 0 ]; then
+				echo ifconfig_${interface}_ipv6=\"inet6\"
+			fi
+		else
+			echo ifconfig_${interface}_ipv6=\"inet6 auto_linklocal\"
+		fi
+		if [ -n "${lagg_id}" ]; then
+			cloned_interfaces="${cloned_interfaces} ${interface}"
+			echo "cloned_interfaces=\"${cloned_interfaces}\""
+		fi
+	done
+
+	#
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT lagg_physnic, lagg_deviceoptions, lagg_interfacegroup_id FROM network_lagginterfacemembers ORDER BY lagg_ordernum" | \
+	while read lagg_physnic lagg_deviceoptions lagg_gid; do
+		lagg_intoptions=$(${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT int_options FROM network_interfaces INNER JOIN network_lagginterface ON network_interfaces.id=network_lagginterface.lagg_interface_id WHERE network_lagginterface.id=${lagg_gid}")
+		echo "ifconfig_${lagg_physnic}=\"${lagg_intoptions} ${lagg_deviceoptions}\""
+	done
+
+	# Hook to support vlan interfaces
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT DISTINCT vlan_pint from network_vlan" | \
+	while read vlan_pint; do
+		echo -n vlans_${vlan_pint}=\"
+		${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT vlan_vint from network_vlan WHERE vlan_pint = \"${vlan_pint}\"" | xargs echo -n
+		echo \"
+	done
+
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT vlan_vint, vlan_tag from network_vlan" | \
+	while read vlan_vint vlan_tag; do
+		echo create_args_${vlan_vint}=\"vlan\ ${vlan_tag}\"
+	done
+}
+
+_host_config()
+{
+	local IFS=\|
+	local hostname domainname nameserver1 nameserver2 nameserver3 ipv4gateway ipv6gateway netwait_enabled netwait_ip
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT gc_hostname, gc_domain, gc_nameserver1, gc_nameserver2, gc_nameserver3, gc_ipv4gateway, gc_ipv6gateway, gc_netwait_enabled, gc_netwait_ip FROM network_globalconfiguration ORDER BY -id LIMIT 1" | \
+	while read -r hostname domainname nameserver1 nameserver2 nameserver3 ipv4gateway ipv6gateway netwait_enabled netwait_ip; do
+		echo hostname=\"${hostname}.${domainname}\"
+		if [ -n "${ipv4gateway}" ]; then
+			echo defaultrouter=\"${ipv4gateway}\"
+		fi
+		if [ -n "${ipv6gateway}" ]; then
+			echo ipv6_defaultrouter=\"${ipv6gateway}\"
+		fi
+		# Generate resolv.conf
+		if [ -n "${nameserver1}" ]; then
+			(echo search ${domainname}
+			for ns in \
+				"${nameserver1}" "${nameserver2}" \
+				"${nameserver3}"
+			do
+				if [ -n "${ns:-}" ]; then
+					echo "nameserver ${ns}"
+				fi
+			done) > /etc/resolv.conf
+		fi
+
+		if [ ${netwait_enabled} -eq 1 ]; then
+			echo netwait_enable=\"YES\"
+			if [ -z "${netwait_ip}" ]; then
+				if [ -n "${ipv4gateway}" ]; then
+					netwait_ip=${ipv4gateway}
+				elif [ -n "${ipv6gateway}" ]; then
+					netwait_ip=${ipv6gateway}
+				fi
+			fi
+			echo netwait_ip=\"${netwait_ip}\"
+		fi
+	done
+}
+
+# _bool_config /variable/ /table/ /field/
+_bool_config()
+{
+	local IFS=\|
+	local boolvalue value key
+	if [ -n "$4" ]; then
+		key="$4"
+	else
+		key="id"
+	fi
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT $3 FROM $2 ORDER BY ${key} DESC LIMIT 1" | \
+	while read boolvalue; do
+		if [ "${boolvalue}" = "1" ]; then
+			value="YES"
+		else
+			value="NO"
+		fi
+		echo $1=\"${value}\"
+	done
+}
+
+# _count_config /variable/ /table/ /field/ /where/
+_count_config()
+{
+	local count value
+	count=`${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT COUNT($3) FROM $2 WHERE $3$4"`
+	if [ "${count}" -gt "0" ]; then
+		value="YES"
+	else
+		value="NO"
+	fi
+	echo $1=\"${value}\"
+}
+
+# _bool_svcconfig /variable/ /service_name/
+_bool_svcconfig()
+{
+	local IFS=\|
+	local boolvalue value
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT srv_enable FROM services_services WHERE srv_service='$2' ORDER BY id DESC LIMIT 1" | \
+	while read boolvalue; do
+		if [ "${boolvalue}" = "1" ]; then
+			value="YES"
+		else
+			value="NO"
+		fi
+		echo $1=\"${value}\"
+	done
+}
+
+# Grab static route configuration
+_staticroute_config()
+{
+	local IFS=\|
+	local id destination gateway interface static_routes
+
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT id, sr_destination, sr_gateway FROM network_staticroute;" | \
+	while read -r id destination gateway; do
+		echo route_librebsd${id}=\"-net ${destination} ${gateway}\"
+	done
+	static_routes=$(${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT id FROM network_staticroute" | sed -e s/^/librebsd/g | xargs echo)
+	if [ -n "${static_routes:-}" ]; then
+		echo static_routes=\"$static_routes\"
+	fi
+}
+
+_nis_config() {
+	local IFS=\|
+	local nisdomain nisservers nissecure nismanycast
+
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT nis_domain, nis_servers, nis_secure_mode, nis_manycast FROM services_nis;" | \
+	while read -r nisdomain nisservers nissecure nismanycast; do
+		local nisflags="-S ${nisdomain}"
+
+		echo "nisdomainname=\"${nisdomain}\""
+		echo "nis_client_enable=\"YES\""
+
+		if [ -n "${nisservers}" ]; then
+			nisflags="${nisflags},${nisservers}"
+		fi
+		if [ "${nissecure}" = "1" ]; then
+			nisflags="${nisflags} -s"
+		fi
+		if [ "${nismanycast}" = "1" ]; then
+			nisflags="${nisflags} -m"
+		fi
+
+		echo "nis_client_flags=\"${nisflags}\""
+	done
+}
+
+_nut_config() {
+	local IFS=\|
+	local boolvalue ups_identifier ups_mode ups_remotehost ups_remoteport
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT srv_enable FROM services_services WHERE srv_service='ups' AND srv_enable = 1 LIMIT 1" | \
+	while read boolvalue; do
+		${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT ups_mode, ups_remotehost, ups_remoteport, ups_identifier FROM services_ups" | \
+		while read -r ups_mode ups_remotehost ups_remoteport ups_identifier; do
+			if [ "${ups_mode}" = "master" ]; then
+				echo "nut_enable=\"YES\""
+				echo "nut_upslog_ups=\"${ups_identifier}\""
+			else
+				echo "nut_upslog_ups=\"${ups_identifier}@${ups_remotehost}:${ups_remoteport}\""
+			fi
+			echo "nut_upslog_enable=\"YES\""
+			echo "nut_upsmon_enable=\"YES\""
+		done
+	done
+}
+
+_ssl_config()
+{
+	local ssl_list
+
+	if http_ssl_enabled
+	then
+		ssl_list="${ssl_list} nginx"
+	fi
+
+	if ftp_tls_enabled
+	then
+		ssl_list="${ssl_list} proftpd"
+	fi
+
+	ssl_list=$(echo ${ssl_list}|xargs)
+	echo "ixssl_list=\"${ssl_list}\""
+}
+
+_gen_conf()
+{
+	## First, import network interface configuration.
+	_interface_config
+	_host_config
+	_staticroute_config
+
+	## Daemons
+	_bool_svcconfig netatalk_enable afp
+	_bool_svcconfig proftpd_enable ftp
+	_bool_svcconfig nfs_server_enable nfs
+	_bool_svcconfig rpc_lockd_enable nfs
+	_bool_svcconfig rpc_statd_enable nfs
+	_bool_svcconfig mountd_enable nfs
+	_bool_svcconfig nfsd_enable nfs
+	_bool_svcconfig samba_enable cifs
+	_bool_svcconfig rsyncd_enable rsync
+	_bool_svcconfig bsnmpd_enable snmp
+	_bool_svcconfig sshd_enable ssh
+	_bool_svcconfig inetd_enable tftp
+	_bool_svcconfig istgt_enable iscsitarget
+	_bool_svcconfig inadynmt_enable dynamicdns
+	_bool_svcconfig smartd_enable smartd
+
+	if dirsrv_enabled activedirectory || dirsrv_enabled nt4; then
+		echo "winbindd_enable=\"YES\""
+	else
+		echo "winbindd_enable=\"NO\""
+	fi
+
+	if dirsrv_enabled nis; then
+		_nis_config
+	fi
+
+	_nut_config
+
+	# Workaround: we don't enable ZFS by default but still want /etc/zfs/exports
+	# be exist for mountd(8)
+	if [ ! -r /etc/zfs/exports ]; then
+		touch /etc/zfs/exports
+	fi
+
+	_count_config zfs_enable storage_volume vol_fstype =\'ZFS\'
+	_count_config fusefs_enable storage_volume vol_fstype =\'NTFS\'
+	_count_config fusefs_safe storage_volume vol_fstype =\'NTFS\'
+	_count_config powerd_enable system_advanced adv_powerdaemon =1
+	_count_config bsdstats_enable system_advanced adv_anonstats =1
+
+	if [ "$(${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT adv_consolescreensaver FROM system_advanced ORDER BY -id LIMIT 1")" -eq 1 ]; then
+		echo "saver=\"daemon\""
+	fi
+
+	local nonroot mountdflags="-r" ip nfsips mountdport statdport lockdport
+
+	nfsips=$(${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT nfs_srv_bindip FROM services_nfs ORDER BY -id LIMIT 1" | tr "," \\n | \
+	while read -r ip; do
+		if [ -n "${ip}" ]; then
+			echo -n "-h ${ip} "
+		fi
+	done)
+
+	# set NFS server options
+	local IFS=\|
+	local numservers
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT nfs_srv_servers FROM services_nfs ORDER BY id DESC LIMIT 1" | \
+	while read numservers; do
+		echo "nfs_server_flags=\"-t -u -n ${numservers} ${nfsips}\""
+	done
+
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT nfs_srv_allow_nonroot, nfs_srv_mountd_port, nfs_srv_rpcstatd_port, nfs_srv_rpclockd_port FROM services_nfs ORDER BY -id LIMIT 1" | \
+	while read -r nonroot mountdport statdport lockdport; do
+		if [ "${nonroot}" -eq 1 ]; then
+			mountdflags="${mountdflags}n"
+		fi
+		if [ -n "${mountdport}" ]; then
+			mountdflags="${mountdflags} -p ${mountdport}"
+		fi
+		if [ -n "${statdport}" ]; then
+			statdport="-p ${statdport}"
+		fi
+		if [ -n "${lockdport}" ]; then
+			lockdport="-p ${lockdport}"
+		fi
+		if [ -n "${nfsips}" ]; then
+			mountdflags="${mountdflags} ${nfsips}"
+			echo "rpcbind_flags=\"${nfsips}\""
+		fi
+		echo "rpc_statd_flags=\"${nfsips}${statdport}\""
+		echo "rpc_lockd_flags=\"${nfsips}${lockdport}\""
+		echo "mountd_flags=\"${mountdflags}\""
+	done
+
+	local smartdint
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT smart_interval FROM services_smart ORDER BY id DESC LIMIT 1" | \
+	while read smartdint; do
+		inter=$(echo "${smartdint}*60"|/usr/bin/bc)
+		echo "smartd_flags=\"-i ${inter}\""
+	done
+
+	_ssl_config
+
+	local kbdmap
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT stg_kbdmap FROM system_settings ORDER BY -id LIMIT 1" | \
+	while read -r kbdmap; do
+		if [ -n "${kbdmap}" ]; then
+			echo "keymap=\"${kbdmap}\""
+		fi
+	done
+
+	echo "geli_devices=\"`${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT encrypted_provider FROM storage_encrypteddisk e JOIN storage_volume v ON e.encrypted_volume_id = v.id WHERE v.vol_encrypt=1;" | \
+		tr \\\n \  `\""
+	${LIBREBSD_SQLITE_CMD} ${LIBREBSD_CONFIG} "SELECT e.encrypted_provider,v.vol_encryptkey FROM storage_encrypteddisk e JOIN storage_volume v ON e.encrypted_volume_id = v.id WHERE v.vol_encrypt=1;" | \
+	while read -r provider key; do
+		_provider=`echo ${provider}|tr '/-' '_'`
+		echo "geli_${_provider}_flags=\"-p -k /data/geli/${key}.key\""
+	done
+}
+
+# If we're running really early, then mount /data read-only
+if [ ! -f ${LIBREBSD_CONFIG} ]; then
+	mount -o ro /data
+	_doumount=1
+fi
+
+# Regenerate stale caches of rc.conf data.  We run multiple time
+# as part of the boot process, and this helps.  It also provides
+# a useful file to look at for debugging.
+#
+# Previously mtime was being used to invalidate the cache
+# However this solution could not deal with backward date changes
+_NEWSUM=$(md5 -q ${LIBREBSD_CONFIG})
+_OLDSUM=$(cat ${LIBREBSD_CONFIG_MD5} 2> /dev/null)
+if [ ! "${_NEWSUM}" = "${_OLDSUM}" ]; then
+	_gen_conf > ${LIBREBSD_RC}
+	echo ${_NEWSUM} > ${LIBREBSD_CONFIG_MD5}
+fi
+
+if [ -n "${_doumount}" ]; then
+	umount /data
+fi
+
+. ${LIBREBSD_RC}

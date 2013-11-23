@@ -1,0 +1,32 @@
+#!/bin/sh
+#
+# $FreeBSD$
+#
+
+# PROVIDE: ix-cache
+# REQUIRE: LOGIN
+
+. /etc/rc.librebsd
+
+populate_cache()
+{
+	if dirsrv_enabled activedirectory ||
+		dirsrv_enabled nt4 ||
+		dirsrv_enabled nis ||
+		dirsrv_enabled ldap
+	then
+		/usr/local/www/librebsdUI/tools/cachetool.py fill
+	fi
+}
+
+expire_cache()
+{
+        /usr/local/www/librebsdUI/tools/cachetool.py expire
+}
+
+name="ix-cache"
+start_cmd='populate_cache'
+stop_cmd='expire_cache'
+            
+load_rc_config $name
+run_rc_command "$1"
